@@ -9,6 +9,9 @@
 //   SIMAB_SUPABASE_URL  https://iqedxrjcosorjwsawowk.supabase.co
 //   SIMAB_ANON_KEY      anon key project SiMAB
 //   SIMAB_OWNER_EMAIL   <NIP Anda>@simab.local  (hanya akun ini yang boleh)
+//   GEMINI_KEYS / GROQ_KEYS / OPENROUTER_KEYS  (untuk chat Jarwo di PWA; dipisah koma,
+//                       boleh sama dengan yang dipakai Jarwo SiMAB. Minimal salah satu.)
+//   Opsional: GEMINI_MODEL, GROQ_MODEL, OPENROUTER_MODEL (dipisah koma, dicoba berurutan)
 //   (SUPABASE_URL & SUPABASE_SERVICE_ROLE_KEY otomatis tersedia)
 
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -309,6 +312,127 @@ async function jarwoContext(p: { from?: string; to?: string }) {
   };
 }
 
+
+// ---------------------------------------------------------------- Chat Jarwo (di PWA)
+const keyList = (k: string) => env(k).split(",").map((s) => s.trim()).filter(Boolean);
+const modelList = (k: string, d: string) => (env(k) || d).split(",").map((s) => s.trim()).filter(Boolean);
+const keyCursor: Record<string, number> = {};
+async function withKeys<T>(name: string, fn: (key: string) => Promise<T>): Promise<T> {
+  const list = keyList(name);
+  if (!list.length) throw new Error(`${name} kosong`);
+  let last: unknown;
+  const start = (keyCursor[name] = ((keyCursor[name] ?? -1) + 1) % list.length);
+  for (let i = 0; i < list.length; i++) { try { return await fn(list[(start + i) % list.length]); } catch (e) { last = e; } }
+  throw last;
+}
+async function withModels<T>(list: string[], fn: (m: string) => Promise<T>): Promise<T> {
+  let last: unknown;
+  for (const m of list) { try { return await fn(m); } catch (e) { last = e; } }
+  throw last;
+}
+async function postJson(url: string, body: unknown, headers: Record<string, string>) {
+  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body), signal: AbortSignal.timeout(40000) });
+  const t = await r.text();
+  if (!r.ok) throw new Error(`${r.status} ${t.slice(0, 200)}`);
+  return JSON.parse(t);
+}
+
+function rideForAi(r: any) {
+  if (!r) return null;
+  const a = r.analysis ?? {};
+  return {
+    ...brief(r),
+    kecepatan_maks_kmj: r.max_speed != null ? +(r.max_speed * 3.6).toFixed(1) : null,
+    hr_maks: r.max_hr, np: r.norm_power, suhu_rata: r.avg_temp, suhu_maks: r.max_temp, catatan: r.note,
+    berhenti: (a.stops ?? []).filter((s: any) => s.dur >= 120).map((s: any) => ({ jam: s.clock, km: s.km, menit: Math.round(s.dur / 60) })),
+    segmen: a.segments, lap: (a.laps ?? []).length > 1 ? a.laps : undefined, best_effort: a.best,
+  };
+}
+
+const AI_TOOLS = [
+  { name: "daftar_ride", description: "Daftar ride pada rentang tanggal (YYYY-MM-DD, zona WITA): tanggal, nama, km, jam bergerak/total, elevasi, kecepatan, HR, power, jumlah berhenti, kecepatan per segmen. Maks 100 ride, terbaru dulu.",
+    parameters: { type: "object", properties: { dari: { type: "string" }, sampai: { type: "string" } } } },
+  { name: "detail_ride", description: "Detail satu ride berdasarkan id: daftar berhenti (jam, km, menit), segmen, lap, best effort, event/COT, catatan.",
+    parameters: { type: "object", properties: { id: { type: "number" } }, required: ["id"] } },
+];
+async function runAiTool(name: string, a: any) {
+  if (name === "daftar_ride") return (await jarwoContext({ from: a.dari, to: a.sampai })).ride_rentang ?? [];
+  if (name === "detail_ride") {
+    const { data } = await sb.from("gowes_rides").select(SUMMARY_COLS + ",analysis").eq("id", Number(a.id)).maybeSingle();
+    return data ? rideForAi(data) : { error: "ride tidak ditemukan" };
+  }
+  return { error: "tool tidak dikenal" };
+}
+
+function systemPrompt(ctx: unknown, ride: unknown, settings: any) {
+  return `Kamu Jarwo, asisten AI di aplikasi Gowes milik pengguna: pelatih & teman gowes yang membaca data Garmin Edge-nya.
+Jawab dalam Bahasa Indonesia, ringkas, hangat, konkret. Satuan: km, km/j, meter, menit/jam, WITA. Jangan pakai LaTeX.
+Pakai HANYA angka dari data di bawah atau dari tool (daftar_ride, detail_ride); jangan mengarang. Bila data tidak ada, katakan.
+Berikan saran latihan, pacing, nutrisi/hidrasi, dan perawatan sepeda yang praktis berdasarkan angka. Untuk keluhan medis serius, sarankan ke tenaga kesehatan.
+Jangan menyebut nama model/penyedia AI; kamu Jarwo.
+Profil: HR maks ${settings?.hr_max ?? "tidak diisi"}, FTP ${settings?.ftp ?? "tidak diisi"}.
+RINGKASAN DATA: ${JSON.stringify(ctx)}
+${ride ? "RIDE YANG SEDANG DIBUKA PENGGUNA: " + JSON.stringify(ride) : ""}`;
+}
+
+async function chatGemini(sys: string, msgs: any[]) {
+  const contents: any[] = msgs.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: String(m.content) }] }));
+  for (let step = 0; step < 5; step++) {
+    const r = await withModels(modelList("GEMINI_MODEL", "gemini-3.5-flash-lite,gemini-3.8-flash"), (mdl) => withKeys("GEMINI_KEYS", (key) =>
+      postJson(`https://generativelanguage.googleapis.com/v1beta/models/${mdl}:generateContent`,
+        { systemInstruction: { parts: [{ text: sys }] }, contents, tools: [{ functionDeclarations: AI_TOOLS }] }, { "x-goog-api-key": key })));
+    const parts = r.candidates?.[0]?.content?.parts || [];
+    const calls = parts.filter((p: any) => p.functionCall);
+    if (!calls.length) return parts.map((p: any) => p.text || "").join("").trim();
+    contents.push({ role: "model", parts });
+    const resp = [];
+    for (const p of calls) {
+      let out: unknown; try { out = await runAiTool(p.functionCall.name, p.functionCall.args || {}); } catch (e) { out = { error: String(e) }; }
+      resp.push({ functionResponse: { name: p.functionCall.name, response: { result: out } } });
+    }
+    contents.push({ role: "user", parts: resp });
+  }
+  return "Maaf, saya belum bisa menyelesaikan itu.";
+}
+async function chatOpenAI(url: string, keyName: string, models: string[], sys: string, msgs: any[]) {
+  const m: any[] = [{ role: "system", content: sys }, ...msgs.map((x) => ({ role: x.role, content: String(x.content) }))];
+  const tools = AI_TOOLS.map((t) => ({ type: "function", function: t }));
+  for (let step = 0; step < 5; step++) {
+    const r = await withModels(models, (model) => withKeys(keyName, (key) => postJson(url, { model, messages: m, tools }, { Authorization: `Bearer ${key}` })));
+    const msg = r.choices?.[0]?.message;
+    if (!msg?.tool_calls?.length) return String(msg?.content || "").trim();
+    m.push(msg);
+    for (const tc of msg.tool_calls) {
+      let out: unknown; try { out = await runAiTool(tc.function.name, JSON.parse(tc.function.arguments || "{}")); } catch (e) { out = { error: String(e) }; }
+      m.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(out).slice(0, 12000) });
+    }
+  }
+  return "Maaf, saya belum bisa menyelesaikan itu.";
+}
+async function chatJarwo(msgs: any[], rideId?: number) {
+  const ctx = await jarwoContext({});
+  let ride = null;
+  if (rideId) {
+    const { data } = await sb.from("gowes_rides").select(SUMMARY_COLS + ",analysis").eq("id", rideId).maybeSingle();
+    ride = rideForAi(data);
+  }
+  const sys = systemPrompt(ctx, ride, await kvGet("settings"));
+  const tries: [string, () => Promise<string>][] = [
+    ["GEMINI_KEYS", () => chatGemini(sys, msgs)],
+    ["GROQ_KEYS", () => chatOpenAI("https://api.groq.com/openai/v1/chat/completions", "GROQ_KEYS", modelList("GROQ_MODEL", "openai/gpt-oss-120b"), sys, msgs)],
+    ["OPENROUTER_KEYS", () => chatOpenAI("https://openrouter.ai/api/v1/chat/completions", "OPENROUTER_KEYS", modelList("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free"), sys, msgs)],
+  ];
+  const errs: string[] = [];
+  let any = false;
+  for (const [k, f] of tries) {
+    if (!keyList(k).length) continue;
+    any = true;
+    try { const reply = await f(); if (reply) return { reply }; } catch (e) { errs.push(`${k.split("_")[0].toLowerCase()}: ${String(e).slice(0, 100)}`); }
+  }
+  if (!any) throw new HttpError(500, "Belum ada API key AI. Isi secret GEMINI_KEYS (atau GROQ_KEYS / OPENROUTER_KEYS) di Supabase Ayyubi.");
+  throw new HttpError(502, "Semua penyedia AI gagal: " + errs.join(" | "));
+}
+
 // ---------------------------------------------------------------- handler
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -460,6 +584,15 @@ Deno.serve(async (req) => {
         need(role, ["owner"]);
         if (body.set) await kvSet("settings", body.set);
         return json({ settings: (await kvGet("settings")) ?? { hr_max: 185, ftp: null } });
+
+      case "chat": {
+        need(role, ["owner"]);
+        const msgs = (Array.isArray(body.messages) ? body.messages : [])
+          .filter((m: any) => m && (m.role === "user" || m.role === "assistant") && m.content)
+          .slice(-12).map((m: any) => ({ role: m.role, content: String(m.content).slice(0, 4000) }));
+        if (!msgs.length) throw new HttpError(400, "pesan kosong");
+        return json(await chatJarwo(msgs, body.ride_id ? Number(body.ride_id) : undefined));
+      }
 
       case "jarwo_context":
         need(role, ["owner", "jarwo"]);

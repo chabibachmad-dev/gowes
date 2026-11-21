@@ -1,5 +1,6 @@
 import { call, getPin, setPin, ApiError } from './api.js';
 import { rideTips, homeTips, tipsHtml } from './saran.js';
+import { initChat } from './chat.js';
 
 // ============================================================ state & util
 const S = { rides: [], garage: { bikes: [], parts: [] }, settings: { hr_max: 185, ftp: null }, lastSync: null, busy: false };
@@ -786,6 +787,7 @@ async function boot() {
   try {
     view.innerHTML = '<div class="empty">Memuat data…</div>';
     const p = await call('ping');
+    initChat(() => { const m = (location.hash || '').match(/^#\/ride\/(-?\d+)$/); return m ? Number(m[1]) : null; });
     S.lastSync = p.last_sync?.date || null; updateSyncLabel(); setInterval(updateSyncLabel, 60000);
     await loadAll();
     render();

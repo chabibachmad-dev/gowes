@@ -1,7 +1,7 @@
 // Service worker: simpan app shell & library CDN agar app tetap terbuka saat sinyal lemah.
 // Data ride selalu diambil dari server (tidak di-cache).
-const CACHE = 'gowes-v4';
-const SHELL = ['./', 'index.html', 'css/app.css', 'js/app.js', 'js/api.js', 'js/config.js', 'js/fit-load.js', 'js/fit-analyze.js', 'js/saran.js',
+const CACHE = 'gowes-v5';
+const SHELL = ['./', 'index.html', 'css/app.css', 'js/app.js', 'js/api.js', 'js/config.js', 'js/fit-load.js', 'js/fit-analyze.js', 'js/saran.js', 'js/chat.js',
   'manifest.json', 'icons/icon-192.png', 'icons/icon-512.png'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => {

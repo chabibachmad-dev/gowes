@@ -46,7 +46,8 @@ supabase secrets set \
   GOWES_CRON_SECRET='<string acak panjang>' \
   SIMAB_SUPABASE_URL='https://iqedxrjcosorjwsawowk.supabase.co' \
   SIMAB_ANON_KEY='<anon key SiMAB>' \
-  SIMAB_OWNER_EMAIL='<NIP Anda>@simab.local'
+  SIMAB_OWNER_EMAIL='<NIP Anda>@simab.local' \
+  GEMINI_KEYS='<key1>,<key2>' GROQ_KEYS='<key1>' OPENROUTER_KEYS='<key1>'
 supabase functions deploy gowes --no-verify-jwt
 ```
 
@@ -73,6 +74,8 @@ dengan token login SiMAB pengguna. Fungsi `gowes` hanya melayani akun yang email
 Opsional: secret `GOWES_FN_URL` di project SiMAB bila URL fungsi berubah.
 
 ## Fitur
+- **Chat Jarwo** (tombol J oranye): tanya apa saja soal data gowes; di halaman detail ride, Jarwo otomatis membaca ride itu.
+  Butuh secret `GEMINI_KEYS` dan/atau `GROQ_KEYS` / `OPENROUTER_KEYS` (dipisah koma, boleh sama dengan Jarwo SiMAB).
 - **Beranda**: total minggu/bulan/tahun, grafik jarak 12 minggu / 12 bulan / tahunan, rekor pribadi,
   peringatan komponen yang mendekati batas ganti.
 - **Detail ride**: peta rute + titik berhenti, profil elevasi & kecepatan (per jarak atau waktu), HR/kadens/power,

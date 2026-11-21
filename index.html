@@ -50,6 +50,24 @@
     </div>
   </section>
 
+  <button class="fab" id="fabJarwo" hidden aria-label="Tanya Jarwo"><span>J</span></button>
+  <section class="chat" id="chat" hidden>
+    <div class="chat-panel">
+      <header class="chat-head">
+        <div class="avatar">J</div>
+        <div class="ttl"><b>Jarwo</b><span id="chatCtx"></span></div>
+        <button class="icon-btn sm" id="chatClear" aria-label="Hapus riwayat" title="Hapus riwayat">🗑</button>
+        <button class="icon-btn sm" id="chatClose" aria-label="Tutup">✕</button>
+      </header>
+      <div class="chat-msgs" id="chatMsgs"></div>
+      <div class="chat-sugg" id="chatSugg"></div>
+      <form class="chat-form" id="chatForm">
+        <textarea id="chatIn" rows="1" placeholder="Tanya Jarwo soal gowesmu…"></textarea>
+        <button class="btn primary" type="submit" aria-label="Kirim">➤</button>
+      </form>
+    </div>
+  </section>
+
   <dialog id="modal"><form method="dialog" id="modalForm"></form></dialog>
   <div class="toast" id="toast"></div>
 

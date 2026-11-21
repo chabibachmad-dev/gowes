@@ -21,7 +21,7 @@ karena Edge Function Supabase hanya diberi waktu CPU ±2 detik per permintaan.
 | `js/fit-analyze.js` | Analisis FIT: berhenti, segmen, lap, best effort, zona HR |
 | `supabase/schema.sql` | Tabel `gowes_*` + jadwal sinkron tiap jam |
 | `supabase/functions/gowes/index.ts` | Edge Function (Garmin, data, Jarwo) |
-| `jarwo/jarwo-gowes.js` | Jembatan untuk Jarwo di SiMAB |
+| `js/saran.js` | Saran otomatis (pacing, berhenti, HR drift, volume, perawatan) |
 
 ## Langkah pemasangan
 
@@ -67,10 +67,10 @@ di akhir `schema.sql` setelah mengganti `<CRON_SECRET>`.
    untuk menarik seluruh riwayat. App lalu otomatis mengunduh & menganalisis file FIT satu per satu.
 4. Di iPhone: Safari → Bagikan → *Add to Home Screen*.
 
-### 6. Jarwo (menyusul)
-`jarwo/jarwo-gowes.js` sudah siap: memeriksa apakah pertanyaan tentang gowes, mengambil ringkasan data
-memakai token login SiMAB, dan menyusunnya jadi konteks prompt. Penyambungan ke `jarwo.js` dilakukan
-setelah file `jarwo.js` dikirim.
+### 6. Jarwo (SiMAB)
+Jarwo memakai tool `data_gowes` di Edge Function `jarwo` (repo SiMAB) yang memanggil fungsi `gowes` ini
+dengan token login SiMAB pengguna. Fungsi `gowes` hanya melayani akun yang emailnya = `SIMAB_OWNER_EMAIL`.
+Opsional: secret `GOWES_FN_URL` di project SiMAB bila URL fungsi berubah.
 
 ## Fitur
 - **Beranda**: total minggu/bulan/tahun, grafik jarak 12 minggu / 12 bulan / tahunan, rekor pribadi,

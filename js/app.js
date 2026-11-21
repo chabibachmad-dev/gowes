@@ -1,4 +1,5 @@
 import { call, getPin, setPin, ApiError } from './api.js';
+import { rideTips, homeTips, tipsHtml } from './saran.js';
 
 // ============================================================ state & util
 const S = { rides: [], garage: { bikes: [], parts: [] }, settings: { hr_max: 185, ftp: null }, lastSync: null, busy: false };
@@ -194,7 +195,6 @@ async function pageHome() {
     return;
   }
 
-  const warnParts = (S.garage.parts || []).filter((p) => p.active && p.pct != null && p.pct >= 0.8);
   const recent = S.rides.slice(0, 5);
   view.innerHTML = `
     <div class="periods">${P.map(([l, s, now]) => `
@@ -202,7 +202,7 @@ async function pageHome() {
         <div class="km">${km(s.dist, 0)}<small> km</small></div>
         <div class="sub">${s.n} ride · ${dur(s.mov)} j · ${nf(s.gain, 0)} m</div></div>`).join('')}
     </div>
-    ${warnParts.length ? `<div class="card"><h3>🔧 Perlu perhatian</h3>${warnParts.map(partRow).join('')}</div>` : ''}
+    <div class="card" id="tipsCard" hidden><h3>💡 Saran</h3><div id="tipsBody"></div></div>
     <div class="card">
       <h3><span>Jarak</span><span class="sp"></span>
         <span class="seg" id="segPer"><button data-v="w" class="on">12 minggu</button><button data-v="m">12 bulan</button><button data-v="y">Tahunan</button></span></h3>
@@ -211,7 +211,14 @@ async function pageHome() {
     <div class="card"><h3>Ride terbaru<span class="sp"></span><a class="btn sm" href="#/rides">Semua</a></h3>
       <div class="list">${recent.map(rideItem).join('')}</div></div>
     <div class="card"><h3>Rekor pribadi</h3>${records()}</div>`;
-  bindPartActs(view);
+  const showTips = (detail) => {
+    const tips = homeTips(S.rides, S.garage, rideDate, detail);
+    const card = $('#tipsCard'); if (!card) return;
+    card.hidden = !tips.length; $('#tipsBody').innerHTML = tipsHtml(tips, esc);
+  };
+  showTips(null);
+  const lastAn = S.rides.find((r) => r.analyzed_at);
+  if (lastAn) call('ride', { id: lastAn.id }).then((x) => showTips(x.ride)).catch(() => {});
   const draw = (mode) => {
     charts.forEach((c) => c.destroy()); charts = [];
     const { labels, data } = series(mode);
@@ -358,6 +365,7 @@ async function pageRide(id) {
       <div class="chart-box"><canvas id="cProf"></canvas></div>
       ${st.hr || st.pwr || st.cad ? '<div class="chart-box sm" style="margin-top:10px"><canvas id="cBody"></canvas></div>' : ''}</div>
     <div class="card" id="eventCard"></div>
+    ${(() => { const t = rideTips(r); return t.length ? `<div class="card"><h3>💡 Saran</h3>${tipsHtml(t, esc)}</div>` : ''; })()}
     ${stopsCard(a)}
     ${segmentsCard(a)}
     ${lapsCard(a)}

@@ -50,6 +50,13 @@ function cleanup() { charts.forEach((c) => c.destroy()); charts = []; maps.forEa
 function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
 function setTitle(t, back = false) { $('#title').textContent = t; $('#btnBack').hidden = !back; }
 
+// ============================================================ nonaktifkan zoom halaman
+// iOS Safari mengabaikan user-scalable=no, jadi cubit-zoom halaman dicegat di sini.
+// Peta (Leaflet) tetap bisa di-zoom karena memakai event touch sendiri.
+['gesturestart', 'gesturechange', 'gestureend'].forEach((ev) => document.addEventListener(ev, (e) => e.preventDefault(), { passive: false }));
+document.addEventListener('touchmove', (e) => { if (e.touches.length > 1 && !e.target.closest('.map')) e.preventDefault(); }, { passive: false });
+document.addEventListener('wheel', (e) => { if (e.ctrlKey && !e.target.closest('.map')) e.preventDefault(); }, { passive: false });
+
 // ============================================================ theme
 function applyTheme() {
   let t = 'dark'; try { t = localStorage.getItem('gowes_theme') || 'dark'; } catch {}

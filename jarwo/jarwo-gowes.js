@@ -10,7 +10,7 @@
 //   }
 
 (function () {
-  const GOWES_FN = 'https://GANTI-PROJECT-REF-AYYUBI.supabase.co/functions/v1/gowes';
+  const GOWES_FN = 'https://alkpmwowhlyffdwfvyeu.supabase.co/functions/v1/gowes';
 
   const KATA = /\b(gowes|sepeda|bersepeda|ride|riding|garmin|edge|km|kilometer|elevasi|tanjakan|cadence|kadens|power|watt|ftp|hr|detak jantung|brevet|audax|ultra|cot|cp|checkpoint|rantai|ban|kampas|sprocket|cassette|servis sepeda)\b/i;
   const ANGGARAN = /\b(pagu|pok|mak|spby|spm|sp2d|kuitansi|perjadin|realisasi|rpd|sbm|anggaran|kegiatan)\b/i;

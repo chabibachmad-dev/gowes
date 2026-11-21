@@ -39,7 +39,7 @@ Dari laptop Linux (butuh Supabase CLI, `supabase login` sekali):
 
 ```bash
 cd gowes
-supabase link --project-ref <REF_AYYUBI>
+supabase link --project-ref alkpmwowhlyffdwfvyeu
 supabase secrets set \
   GARMIN_API_KEY='<key Garmin>' \
   GOWES_PIN='<kode akses PWA, min 6 karakter>' \
@@ -57,10 +57,10 @@ matikan **Verify JWT**, lalu isi secrets di Edge Functions → Secrets.
 
 ### 4. Sinkron otomatis tiap jam
 Database → Extensions → aktifkan **pg_cron** dan **pg_net**. Lalu jalankan blok `cron.schedule`
-di akhir `schema.sql` setelah mengganti `<PROJECT_REF>` dan `<CRON_SECRET>`.
+di akhir `schema.sql` setelah mengganti `<CRON_SECRET>`.
 
 ### 5. Pasang PWA
-1. Isi `js/config.js` (Project URL & anon key Ayyubi).
+1. `js/config.js` sudah berisi Project URL & publishable key Ayyubi.
 2. Buat repo baru (mis. `gowes`) di akun `chabibachmad-dev`, commit semua file lewat GitHub Desktop,
    lalu aktifkan GitHub Pages (branch `main`, folder root).
 3. Buka `https://chabibachmad-dev.github.io/gowes/`, masukkan kode akses → **Setelan → Sinkron penuh**
@@ -70,7 +70,7 @@ di akhir `schema.sql` setelah mengganti `<PROJECT_REF>` dan `<CRON_SECRET>`.
 ### 6. Jarwo (menyusul)
 `jarwo/jarwo-gowes.js` sudah siap: memeriksa apakah pertanyaan tentang gowes, mengambil ringkasan data
 memakai token login SiMAB, dan menyusunnya jadi konteks prompt. Penyambungan ke `jarwo.js` dilakukan
-setelah file `jarwo.js` dikirim. Ganti `GOWES_FN` di file itu dengan URL fungsi Ayyubi.
+setelah file `jarwo.js` dikirim.
 
 ## Fitur
 - **Beranda**: total minggu/bulan/tahun, grafik jarak 12 minggu / 12 bulan / tahunan, rekor pribadi,

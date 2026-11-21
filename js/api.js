@@ -11,8 +11,7 @@ export async function call(action, payload = {}, { binary = false, pin } = {}) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      apikey: SUPABASE_ANON_KEY, // publishable key cukup di header apikey (bukan Bearer)
       'x-gowes-pin': pin ?? getPin(),
     },
     body: JSON.stringify({ action, ...payload }),

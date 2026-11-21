@@ -100,14 +100,14 @@ where not exists (select 1 from public.gowes_bikes);
 -- =====================================================================
 -- SINKRON OTOMATIS TIAP JAM (opsional tapi disarankan)
 -- 1) Aktifkan extension pg_cron dan pg_net (Database → Extensions).
--- 2) Ganti <PROJECT_REF> dan <CRON_SECRET> lalu jalankan blok di bawah.
+-- 2) Ganti <CRON_SECRET> (sama dengan secret GOWES_CRON_SECRET), hapus tanda -- lalu jalankan blok di bawah.
 -- =====================================================================
 -- select cron.schedule(
 --   'gowes-sync-hourly',
 --   '17 * * * *',
 --   $$
 --   select net.http_post(
---     url     := 'https://<PROJECT_REF>.supabase.co/functions/v1/gowes',
+--     url     := 'https://alkpmwowhlyffdwfvyeu.supabase.co/functions/v1/gowes',
 --     headers := jsonb_build_object('Content-Type','application/json','x-cron-secret','<CRON_SECRET>'),
 --     body    := '{"action":"sync"}'::jsonb,
 --     timeout_milliseconds := 120000

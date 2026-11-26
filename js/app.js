@@ -151,6 +151,8 @@ const routes = [
   [/^#\/rides$/, pageRides, 'rides'],
   [/^#\/ride\/(-?\d+)$/, pageRide, 'rides'],
   [/^#\/garage$/, pageGarage, 'garage'],
+  [/^#\/plan$/, pagePlans, 'plan'],
+  [/^#\/plan\/(\d+)$/, pagePlanDetail, 'plan'],
   [/^#\/settings$/, pageSettings, 'settings'],
 ];
 async function render() {
@@ -671,6 +673,138 @@ function editPart(p) {
     $('#modalForm [name=name]').value = o.value === 'Lainnya' ? '' : o.value;
     $('#modalForm [name=limit_km]').value = o.dataset.l;
   };
+}
+
+// ============================================================ RENCANA (GPX ride plan)
+// kecepatan datar untuk estimasi: rata-rata kecepatan bergerak ride (≥10 km), default 20
+function avgFlatSpeed() {
+  const rs = S.rides.filter((r) => r.avg_speed && r.distance_m >= 10000);
+  if (!rs.length) return 20;
+  const v = rs.reduce((s, r) => s + r.avg_speed, 0) / rs.length * 3.6;
+  return Math.round(Math.min(35, Math.max(10, v)) * 10) / 10;
+}
+
+async function pagePlans() {
+  setTitle('Rencana rute');
+  view.innerHTML = `
+    <div class="card">
+      <h3>Buat rencana dari GPX</h3>
+      <p class="muted" style="margin:0 0 10px;font-size:13px">Unggah file .gpx (rute dari Komoot, RideWithGPS, Strava, Garmin, dll). Gowes menghitung jarak, elevasi, tanjakan, dan perkiraan waktu dari kecepatan rata-rata Anda (${nf(avgFlatSpeed(), 1)} km/j).</p>
+      <input type="file" id="gpxIn" accept=".gpx" multiple>
+    </div>
+    <div id="planList"><div class="empty">Memuat…</div></div>`;
+  $('#gpxIn').onchange = async (e) => {
+    const files = [...e.target.files]; if (!files.length) return;
+    const { analyzeGpx } = await import('./gpx.js');
+    let ok = 0;
+    for (const [i, f] of files.entries()) {
+      banner(`Menganalisis ${i + 1}/${files.length}: ${esc(f.name)}`, i / files.length);
+      try {
+        const xml = await f.text();
+        const res = analyzeGpx(xml, { flatSpeedKmh: avgFlatSpeed() });
+        const name = res.summary.name || f.name.replace(/\.gpx$/i, '');
+        await call('save_plan', { plan: { name, ...res, gpx: xml } });
+        ok++;
+      } catch (err) { toast(`${f.name}: ${err.message}`, 5000); }
+    }
+    banner(null); toast(`${ok} rencana disimpan`); e.target.value = '';
+    pagePlans();
+  };
+  try {
+    const { plans } = await call('plans');
+    const el = $('#planList');
+    if (!plans.length) { el.innerHTML = `<div class="empty"><b>Belum ada rencana</b>Unggah file GPX di atas untuk membuat rencana rute pertama.</div>`; return; }
+    el.innerHTML = `<div class="list">${plans.map(planItem).join('')}</div>`;
+  } catch (e) { $('#planList').innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+
+function planItem(p) {
+  return `<a class="ride-item" href="#/plan/${p.id}">
+    <div class="d"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin:4px auto;display:block"><path d="M9 20l-5.4 2V6l5.4-2 6 2 5.4-2v16l-5.4 2-6-2V4"/></svg></div>
+    <div style="min-width:0"><div class="n">${esc(p.name)}</div>
+      <div class="m">${nf(p.elev_gain, 0)} m naik · est. ${dur(p.est_time_s)} jam</div></div>
+    <div class="k">${km(p.distance_m)}<small>km</small></div></a>`;
+}
+
+async function pagePlanDetail(id) {
+  setTitle('Rencana', true);
+  view.innerHTML = '<div class="empty">Memuat…</div>';
+  const { plan: p } = await call('plan', { id: Number(id) });
+  const s = p.summary || {}, a = p.analysis || {}, geo = p.geo || {};
+  setTitle(p.name, true);
+  view.innerHTML = `
+    <div class="card">
+      <div class="grid g-auto">
+        ${stat('Jarak', km(s.distance_m, 1), 'km', true)}
+        ${stat('Elevasi naik', nf(s.elev_gain, 0), 'm')}
+        ${stat('Elevasi turun', nf(s.elev_loss, 0), 'm')}
+        ${stat('Perkiraan waktu', dur(s.est_moving_s), 'j')}
+        ${s.has_ele ? stat('Titik tertinggi', nf(s.ele_max, 0), 'm') : ''}
+        ${s.has_ele ? stat('Titik terendah', nf(s.ele_min, 0), 'm') : ''}
+        ${stat('Tanjakan', a.climb_count ?? 0, '')}
+        ${stat('Kec. dipakai', nf(s.flat_speed_kmh, 1), 'km/j')}
+      </div>
+      <p class="muted" style="font-size:12px;margin:10px 0 0">Perkiraan waktu = kecepatan bergerak, belum termasuk berhenti/istirahat. Dihitung dari kecepatan datar Anda disesuaikan kemiringan.</p>
+      ${p.note ? `<p style="margin:10px 0 0;white-space:pre-wrap">${esc(p.note)}</p>` : ''}
+    </div>
+    ${geo.lat ? '<div class="card"><h3>Rute</h3><div class="map" id="map"></div></div>' : ''}
+    ${s.has_ele ? '<div class="card"><h3>Profil elevasi</h3><div class="chart-box"><canvas id="cEle"></canvas></div></div>' : ''}
+    ${climbsCard(a)}
+    <div class="row-btns">
+      <button class="btn" id="btnRename">Ubah nama/catatan</button>
+      ${p.gpx ? '<button class="btn" id="btnGpx">Unduh GPX</button>' : ''}
+      <button class="btn danger" id="btnDel">Hapus</button>
+    </div>`;
+
+  $('#btnRename').onclick = () => modal(
+    `<h3>Ubah rencana</h3><label class="f">Nama</label><input name="name" value="${esc(p.name)}">
+     <label class="f">Catatan (CP, titik air, target start…)</label><textarea name="note" rows="4">${esc(p.note)}</textarea>`,
+    async (f) => { await call('update_plan', { id: p.id, patch: { name: f.get('name'), note: f.get('note') || null } }); render(); });
+  const bg = $('#btnGpx');
+  if (bg) bg.onclick = () => {
+    const blob = new Blob([p.gpx], { type: 'application/gpx+xml' });
+    const url = URL.createObjectURL(blob); const a2 = document.createElement('a');
+    a2.href = url; a2.download = `${p.name.replace(/[^\w-]+/g, '_')}.gpx`; a2.click(); URL.revokeObjectURL(url);
+  };
+  $('#btnDel').onclick = async () => { if (!confirm('Hapus rencana ini?')) return; await call('delete_plan', { id: p.id }); location.hash = '#/plan'; };
+
+  if (geo.lat) { await chartReady(); drawPlanMap(geo, a); if (s.has_ele) drawEleProfile(geo); }
+}
+
+function drawPlanMap(geo, a) {
+  const pts = [];
+  for (let i = 0; i < geo.lat.length; i++) if (geo.lat[i] != null) pts.push([geo.lat[i], geo.lng[i]]);
+  if (!pts.length) { $('#map')?.closest('.card').remove(); return; }
+  const m = L.map('map', { zoomControl: true });
+  maps.push(m);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(m);
+  const line = L.polyline(pts, { color: cssVar('--acc'), weight: 4, opacity: .9 }).addTo(m);
+  L.circleMarker(pts[0], { radius: 7, color: '#fff', weight: 2, fillColor: cssVar('--ok'), fillOpacity: 1 }).addTo(m).bindPopup('Start');
+  L.circleMarker(pts[pts.length - 1], { radius: 7, color: '#fff', weight: 2, fillColor: cssVar('--bad'), fillOpacity: 1 }).addTo(m).bindPopup('Finish');
+  // tandai awal tiap tanjakan
+  for (const c of a.climbs || []) {
+    const i = geo.d.findIndex((d) => d >= c.from_km);
+    if (i >= 0 && geo.lat[i] != null) L.circleMarker([geo.lat[i], geo.lng[i]], { radius: 6, color: cssVar('--warn'), weight: 2, fillColor: cssVar('--warn'), fillOpacity: .5 })
+      .addTo(m).bindPopup(`<b>Tanjakan ${c.cat}</b><br>${nf(c.len_m / 1000, 1)} km · ${nf(c.gain_m, 0)} m · ${nf(c.avg_grade, 1)}%`);
+  }
+  m.fitBounds(line.getBounds(), { padding: [16, 16] });
+  setTimeout(() => m.invalidateSize(), 120);
+}
+
+function drawEleProfile(geo) {
+  charts.push(new Chart($('#cEle'), {
+    type: 'line',
+    data: { datasets: [{ label: 'Elevasi (m)', data: geo.d.map((d, i) => ({ x: d, y: geo.ele[i] })), borderColor: cssVar('--acc'), backgroundColor: cssVar('--acc') + '33', fill: true, pointRadius: 0, borderWidth: 1.4, tension: .2 }] },
+    options: lineOpts('d', { y: 'm' }),
+  }));
+}
+
+function climbsCard(a) {
+  const cl = a.climbs || [];
+  if (!cl.length) return '';
+  return `<div class="card"><h3>Tanjakan</h3><div class="scroll-x"><table class="tbl"><thead><tr><th>Km</th><th>Panjang</th><th>Naik</th><th>Rata grade</th><th>Kat.</th></tr></thead><tbody>
+    ${cl.map((c) => `<tr class="${c.cat === 'berat' ? 'long' : ''}"><td>${nf(c.from_km, 1)}–${nf(c.to_km, 1)}</td><td>${nf(c.len_m / 1000, 1)} km</td><td>${nf(c.gain_m, 0)} m</td><td>${nf(c.avg_grade, 1)}%</td><td>${c.cat}</td></tr>`).join('')}
+    </tbody></table></div></div>`;
 }
 
 // ============================================================ SETTINGS

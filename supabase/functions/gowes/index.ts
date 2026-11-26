@@ -309,6 +309,14 @@ async function jarwoContext(p: { from?: string; to?: string }) {
       const bike = parts.bikes.find((b: any) => b.id === x.bike_id);
       return { sepeda: bike?.name, komponen: x.name, km_terpakai: x.km, batas_km: x.limit_km, persen: x.pct != null ? Math.round(x.pct * 100) : null };
     }),
+    rencana_rute: await (async () => {
+      const { data } = await sb.from("gowes_plans").select("name,distance_m,elev_gain,est_time_s").order("created_at", { ascending: false }).limit(10);
+      return (data ?? []).map((p: any) => ({
+        nama: p.name, km: p.distance_m != null ? +(p.distance_m / 1000).toFixed(1) : null,
+        elevasi_m: p.elev_gain != null ? Math.round(p.elev_gain) : null,
+        perkiraan_jam: p.est_time_s != null ? +(p.est_time_s / 3600).toFixed(1) : null,
+      }));
+    })(),
   };
 }
 
@@ -531,6 +539,56 @@ Deno.serve(async (req) => {
       case "garage":
         need(role, ["owner", "jarwo"]);
         return json(await partsStatus());
+
+      case "plans": {
+        need(role, ["owner", "jarwo"]);
+        const { data, error } = await sb.from("gowes_plans")
+          .select("id,name,note,distance_m,elev_gain,elev_loss,est_time_s,created_at")
+          .order("created_at", { ascending: false }).limit(500);
+        if (error) throw new HttpError(500, error.message);
+        return json({ plans: data });
+      }
+      case "plan": {
+        need(role, ["owner", "jarwo"]);
+        const cols = role === "owner" ? "*" : "id,name,note,distance_m,elev_gain,elev_loss,est_time_s,summary,analysis,created_at";
+        const { data, error } = await sb.from("gowes_plans").select(cols).eq("id", Number(body.id)).maybeSingle();
+        if (error) throw new HttpError(500, error.message);
+        if (!data) throw new HttpError(404, "Rencana tidak ditemukan");
+        return json({ plan: data });
+      }
+      case "save_plan": {
+        need(role, ["owner"]);
+        const p = body.plan ?? {};
+        const row = {
+          id: Number(p.id) || Date.now(),
+          name: String(p.name || "Rencana").slice(0, 120),
+          note: p.note ? String(p.note).slice(0, 2000) : null,
+          distance_m: p.summary?.distance_m ?? null,
+          elev_gain: p.summary?.elev_gain ?? null,
+          elev_loss: p.summary?.elev_loss ?? null,
+          est_time_s: p.summary?.est_moving_s ?? null,
+          summary: p.summary ?? null,
+          analysis: p.analysis ?? null,
+          geo: p.geo ?? null,
+          gpx: p.gpx ? String(p.gpx).slice(0, 2_000_000) : null,
+        };
+        const { error } = await sb.from("gowes_plans").upsert(row, { onConflict: "id" });
+        if (error) throw new HttpError(500, error.message);
+        return json({ ok: true, id: row.id });
+      }
+      case "update_plan": {
+        need(role, ["owner"]);
+        const allowed = ["name", "note"];
+        const patch = Object.fromEntries(Object.entries(body.patch ?? {}).filter(([k]) => allowed.includes(k)));
+        const { error } = await sb.from("gowes_plans").update(patch).eq("id", Number(body.id));
+        if (error) throw new HttpError(500, error.message);
+        return json({ ok: true });
+      }
+      case "delete_plan": {
+        need(role, ["owner"]);
+        await sb.from("gowes_plans").delete().eq("id", Number(body.id));
+        return json({ ok: true });
+      }
 
       case "save_bike": {
         need(role, ["owner"]);

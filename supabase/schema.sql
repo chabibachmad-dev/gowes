@@ -71,6 +71,22 @@ create table if not exists public.gowes_parts (
   created_at    timestamptz not null default now()
 );
 
+create table if not exists public.gowes_plans (
+  id          bigint primary key,            -- epoch ms saat dibuat
+  name        text not null,
+  note        text,
+  distance_m  double precision,
+  elev_gain   double precision,
+  elev_loss   double precision,
+  est_time_s  double precision,
+  summary     jsonb,                          -- ringkasan analisis GPX
+  analysis    jsonb,                          -- tanjakan dll
+  geo         jsonb,                          -- {lat[],lng[],d[],ele[]} untuk peta & grafik
+  gpx         text,                           -- GPX asli (agar bisa diunduh lagi ke Edge)
+  created_at  timestamptz not null default now()
+);
+create index if not exists gowes_plans_created_idx on public.gowes_plans (created_at desc);
+
 create table if not exists public.gowes_kv (
   key         text primary key,
   value       jsonb,
@@ -90,6 +106,7 @@ alter table public.gowes_streams  enable row level security;
 alter table public.gowes_parts    enable row level security;
 alter table public.gowes_kv       enable row level security;
 alter table public.gowes_sync_log enable row level security;
+alter table public.gowes_plans    enable row level security;
 -- (sengaja tidak ada CREATE POLICY)
 
 -- Sepeda awal (ubah namanya nanti di menu Garasi)

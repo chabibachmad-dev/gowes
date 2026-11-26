@@ -87,6 +87,10 @@ Opsional: secret `GOWES_FN_URL` di project SiMAB bila URL fungsi berubah.
   riwayat penggantian.
 - **Impor .FIT manual** (Setelan): bila API bermasalah, ambil file langsung dari folder `Garmin/Activity` di Edge.
 
+## Rencana rute (GPX)
+- Tab **Rencana**: unggah file .gpx (Komoot/RideWithGPS/Strava/Garmin). Gowes menghitung jarak, elevasi naik/turun, profil elevasi, daftar tanjakan (ringan/sedang/berat), dan perkiraan waktu bergerak dari kecepatan rata-rata ride Anda disesuaikan kemiringan. Bisa diberi catatan, diunduh ulang GPX-nya, dan dibaca Jarwo (konteks "rencana_rute").
+- Tabel baru `gowes_plans` (jalankan ulang bagian itu di schema.sql).
+
 ## Catatan
 - Personal API hanya **pull**: ride baru muncul setelah sinkron (tiap jam via cron, atau tombol ⟳, atau saat app dibuka).
 - Garmin menyebut beberapa metrik (VO2max, recovery time, training effect) mungkin tidak ikut di FIT dari API.
